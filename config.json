@@ -1,15 +1,48 @@
 {
   "labels": [
-    "¡CONTESTAR!",
-    "¡URGENTE!",
-    "ALERTAS SEGURIDAD",
-    "BASURA",
-    "FACTURAS",
-    "JOB ALERTS",
-    "NEWSLETTER",
-    "NOTIFICACIONES",
-    "OTHER",
-    "PISOS",
-    "PKMN"
+    {
+      "nombre": "¡URGENTE!",
+      "descripcion": "Correos que requieren atención inmediata, contienen palabras como urgente, importante, ASAP, o tienen tono de emergencia."
+    },
+    {
+      "nombre": "BASURA",
+      "descripcion": "Spam, basura y promociones no deseadas."
+    },
+    {
+      "nombre": "NEWSLETTER",
+      "descripcion": "Boletines informativos, suscripciones, correos masivos de marketing, promociones o actualizaciones periódicas."
+    },
+    {
+      "nombre": "NOTIFICACIONES",
+      "descripcion": "Notificaciones automáticas de apps y servicios sobre características, funcionalidades y actualizaciones."
+    },
+    {
+      "nombre": "FACTURAS",
+      "descripcion": "Correos relacionados con facturas, pagos, recibos, invoices, cobros, documentos financieros y emails de banco."
+    },
+    {
+      "nombre": "ALERTAS SEGURIDAD",
+      "descripcion": "Alertas de login, verificaciones de seguridad, accesos a cuentas y notificaciones similares."
+    },
+    {
+      "nombre": "JOB ALERTS",
+      "descripcion": "Ofertas de trabajo, LinkedIn, alertas de empleo y comunicaciones relacionadas con procesos de selección y oportunidades profesionales."
+    },
+    {
+      "nombre": "¡CONTESTAR!",
+      "descripcion": "Correos dirigidos a mí personalmente que requieren respuesta. Excluir LinkedIn, redes sociales y cualquier email relacionado con Pokémon o Cardmarket."
+    },
+    {
+      "nombre": "PKMN",
+      "descripcion": "Todo lo relacionado con Pokémon, Cardmarket, Wallapop y Vinted, incluyendo compras y ventas."
+    },
+    {
+      "nombre": "PISOS",
+      "descripcion": "Emails sobre pisos e inmobiliarias, incluyendo Idealista, Hausum e hipotecas."
+    },
+    {
+      "nombre": "OTHER",
+      "descripcion": "Emails que no encajan en ninguna otra categoría."
+    }
   ]
 }
