@@ -1,0 +1,29 @@
+name: Etiquetar Emails con GPT
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'  # Cada 4 horas
+  workflow_dispatch:         # También puedes ejecutarlo manualmente
+
+jobs:
+  etiquetar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v3
+
+      - name: Instalar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: |
+          pip install google-auth google-auth-oauthlib google-api-python-client openai
+
+      - name: Ejecutar script
+        env:
+          GMAIL_CREDENTIALS: ${{ secrets.GMAIL_CREDENTIALS }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python gmail_labels.py
