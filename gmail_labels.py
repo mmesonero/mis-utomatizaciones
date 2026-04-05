@@ -35,18 +35,24 @@ def get_email_details(service, msg_id):
     sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Desconocido')
     return subject, sender
 
-def decide_label(subject, sender, labels):
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    prompt = f"""Eres un asistente que clasifica emails en etiquetas.
+def build_prompt(subject, sender, labels):
+    etiquetas = "\n".join(
+        f"- {l['nombre']}: {l['descripcion']}" for l in labels
+    )
+    return f"""Eres un asistente que clasifica emails en etiquetas.
 
-Etiquetas disponibles: {', '.join(labels)}
+Estas son las etiquetas disponibles y su descripción:
+{etiquetas}
 
-Email:
+Email a clasificar:
 - Remitente: {sender}
 - Asunto: {subject}
 
-Responde ÚNICAMENTE con el nombre exacto de una etiqueta de la lista."""
+Responde ÚNICAMENTE con el nombre exacto de una etiqueta de la lista, sin explicaciones."""
 
+def decide_label(subject, sender, labels):
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    prompt = build_prompt(subject, sender, labels)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
@@ -55,9 +61,9 @@ Responde ÚNICAMENTE con el nombre exacto de una etiqueta de la lista."""
     return response.choices[0].message.content.strip()
 
 def apply_label(service, msg_id, label_name):
-    labels = service.users().labels().list(userId='me').execute()
+    all_labels = service.users().labels().list(userId='me').execute()
     label_id = next(
-        (l['id'] for l in labels['labels'] if l['name'] == label_name),
+        (l['id'] for l in all_labels['labels'] if l['name'] == label_name),
         None
     )
     if label_id:
@@ -72,11 +78,12 @@ def main():
     labels = config['labels']
     service = get_gmail_service()
     emails = get_unread_emails(service)
-    
+
     for email in emails:
         subject, sender = get_email_details(service, email['id'])
         label = decide_label(subject, sender, labels)
-        if label in labels:
+        label_names = [l['nombre'] for l in labels]
+        if label in label_names:
             apply_label(service, email['id'], label)
             print(f"✅ {subject[:50]} → {label}")
         else:
