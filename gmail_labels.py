@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from openai import OpenAI
@@ -27,15 +28,30 @@ def get_email_details(service, msg_id):
     msg = service.users().messages().get(
         userId='me',
         id=msg_id,
-        format='metadata',
-        metadataHeaders=['Subject', 'From']
+        format='full'
     ).execute()
     headers = msg['payload']['headers']
     subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'Sin asunto')
     sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Desconocido')
-    return subject, sender
 
-def build_prompt(subject, sender, labels):
+    body = ''
+    payload = msg['payload']
+    if 'parts' in payload:
+        for part in payload['parts']:
+            if part['mimeType'] == 'text/plain':
+                data = part['body'].get('data', '')
+                if data:
+                    body = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+                    break
+    elif 'body' in payload:
+        data = payload['body'].get('data', '')
+        if data:
+            body = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+
+    body = ' '.join(body.split()[:300])
+    return subject, sender, body
+
+def build_prompt(subject, sender, body, labels):
     etiquetas = "\n".join(
         f"- {l['nombre']}: {l['descripcion']}" for l in labels
     )
@@ -47,12 +63,13 @@ Estas son las etiquetas disponibles y su descripción:
 Email a clasificar:
 - Remitente: {sender}
 - Asunto: {subject}
+- Contenido: {body}
 
 Responde ÚNICAMENTE con el nombre exacto de una etiqueta de la lista, sin explicaciones."""
 
-def decide_label(subject, sender, labels):
+def decide_label(subject, sender, body, labels):
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    prompt = build_prompt(subject, sender, labels)
+    prompt = build_prompt(subject, sender, body, labels)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
@@ -80,8 +97,8 @@ def main():
     emails = get_unread_emails(service)
 
     for email in emails:
-        subject, sender = get_email_details(service, email['id'])
-        label = decide_label(subject, sender, labels)
+        subject, sender, body = get_email_details(service, email['id'])
+        label = decide_label(subject, sender, body, labels)
         label_names = [l['nombre'] for l in labels]
         if label in label_names:
             apply_label(service, email['id'], label)
