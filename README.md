@@ -44,7 +44,7 @@ Labels and their descriptions are defined in `config.json` — fully editable wi
 - **Python 3.11**
 - **OpenAI API** — GPT-4o-mini for classification
 - **Gmail IMAP** — for reading and labeling emails
-- **GitHub Actions** — runs every 4 hours, no server needed
+- **GitHub Actions** — runs every 1 hours, no server needed
 
 ### Why IMAP instead of Gmail API?
 
