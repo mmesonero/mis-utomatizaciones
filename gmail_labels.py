@@ -34,7 +34,7 @@ def has_custom_label(mail, email_id, label_names):
     return False
 
 def get_email_details(mail, email_id):
-    _, msg_data = mail.fetch(email_id, "(RFC822)")
+    _, msg_data = mail.fetch(email_id, "(BODY.PEEK[])")
     msg = email.message_from_bytes(msg_data[0][1])
 
     subject, encoding = decode_header(msg["Subject"])[0]
