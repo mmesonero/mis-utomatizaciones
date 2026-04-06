@@ -104,7 +104,7 @@ def main():
 
     for email_id in email_ids:
         if has_custom_label(mail, email_id, label_names):
-            print(f"⏭️ Email ya etiquetado, saltando")
+            print(f"⏭️ {subject[:50]} ya etiquetado, saltando")
             continue
 
         subject, sender, body = get_email_details(mail, email_id)
