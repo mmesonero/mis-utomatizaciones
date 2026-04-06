@@ -46,6 +46,21 @@ Labels and their descriptions are defined in `config.json` — fully editable wi
 - **Gmail IMAP** — for reading and labeling emails
 - **GitHub Actions** — runs every 4 hours, no server needed
 
+### Why IMAP instead of Gmail API?
+
+This project uses Gmail IMAP with an App Password instead of the official Gmail API. Here's why:
+
+The Gmail API requires an OAuth2 token that needs to be generated interactively from a browser — which is not possible in a fully automated cloud environment like GitHub Actions without a local machine involved.
+
+IMAP with an App Password works headlessly: GitHub Actions connects directly to Gmail using your credentials stored as secrets, with no browser or manual step required after the initial setup.
+
+**How the login works:**
+1. You generate a 16-character App Password in your Google Account (separate from your main password)
+2. This App Password is stored as a GitHub Secret — never exposed in the code
+3. The script connects to `imap.gmail.com` using your Gmail address and the App Password
+4. Google accepts this as a trusted connection, bypassing the need for MFA on each run
+5. The App Password can be revoked at any time from your Google Account without affecting anything else
+
 ---
 
 ## ⚙️ Setup
@@ -66,3 +81,4 @@ Go to `Settings → Secrets and variables → Actions` and add:
 
 1. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
 2. Create a new app
+
