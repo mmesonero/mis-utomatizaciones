@@ -21,7 +21,7 @@ def get_recent_emails(mail):
     mail.select("inbox")
     _, messages = mail.search(None, 'ALL')
     email_ids = messages[0].split()
-    return email_ids[-15:]
+    return email_ids[-50:]
 
 def has_custom_label(mail, email_id, label_names):
     _, data = mail.fetch(email_id, '(X-GM-LABELS)')
