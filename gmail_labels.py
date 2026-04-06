@@ -19,9 +19,9 @@ def get_gmail_connection():
 
 def get_unread_emails(mail):
     mail.select("inbox")
-    _, messages = mail.search(None, 'UNSEEN')
+    _, messages = mail.search(None, 'ALL')
     email_ids = messages[0].split()
-    return email_ids[-20:] if len(email_ids) > 20 else email_ids
+    return email_ids[-15:]
 
 def get_email_details(mail, email_id):
     _, msg_data = mail.fetch(email_id, "(RFC822)")
