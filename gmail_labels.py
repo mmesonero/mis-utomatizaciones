@@ -1,6 +1,5 @@
 import os
 import json
-import base64
 import imaplib
 import email
 from email.header import decode_header
@@ -11,49 +10,68 @@ def load_config():
         return json.load(f)
 
 def get_gmail_connection():
-    gmail_user = os.environ["GMAIL_USER"]
-    gmail_password = os.environ["GMAIL_CREDENTIALS"]
-    mail = imaplib.IMAP4_SSL("imap.gmail.com")
-    mail.login(gmail_user, gmail_password)
-    return mail
+    try:
+        gmail_user = os.environ["GMAIL_USER"]
+        gmail_password = os.environ["GMAIL_CREDENTIALS"]
+        mail = imaplib.IMAP4_SSL("imap.gmail.com")
+        mail.login(gmail_user, gmail_password)
+        print("✅ Conexión a Gmail establecida")
+        return mail
+    except Exception as e:
+        print(f"❌ Error conectando a Gmail: {e}")
+        raise
 
 def get_recent_emails(mail):
     mail.select("inbox")
     _, messages = mail.search(None, 'ALL')
     email_ids = messages[0].split()
+    total = len(email_ids)
+    print(f"📬 {total} emails en bandeja, procesando últimos 50")
     return email_ids[-50:]
 
 def has_custom_label(mail, email_id, label_names):
-    _, data = mail.fetch(email_id, '(X-GM-LABELS)')
-    if not data or not data[0]:
+    try:
+        _, data = mail.fetch(email_id, '(X-GM-LABELS)')
+        if not data or not data[0]:
+            return False
+        labels_raw = str(data[0])
+        for label in label_names:
+            if f'"{label}"' in labels_raw or f' {label} ' in labels_raw:
+                return True
         return False
-    labels_raw = str(data[0])
-    for label in label_names:
-        if label in labels_raw:
-            return True
-    return False
+    except Exception:
+        return False
 
 def get_email_details(mail, email_id):
-    _, msg_data = mail.fetch(email_id, "(BODY.PEEK[])")
-    msg = email.message_from_bytes(msg_data[0][1])
+    try:
+        _, msg_data = mail.fetch(email_id, "(BODY.PEEK[])")
+        msg = email.message_from_bytes(msg_data[0][1])
 
-    subject, encoding = decode_header(msg["Subject"])[0]
-    if isinstance(subject, bytes):
-        subject = subject.decode(encoding or "utf-8", errors="ignore")
+        raw_subject = msg["Subject"]
+        if raw_subject:
+            subject, encoding = decode_header(raw_subject)[0]
+            if isinstance(subject, bytes):
+                subject = subject.decode(encoding or "utf-8", errors="ignore")
+        else:
+            subject = "Sin asunto"
 
-    sender = msg.get("From", "Desconocido")
+        sender = msg.get("From", "Desconocido")
 
-    body = ""
-    if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() == "text/plain":
-                body = part.get_payload(decode=True).decode("utf-8", errors="ignore")
-                break
-    else:
-        body = msg.get_payload(decode=True).decode("utf-8", errors="ignore")
+        body = ""
+        if msg.is_multipart():
+            for part in msg.walk():
+                if part.get_content_type() == "text/plain":
+                    body = part.get_payload(decode=True).decode("utf-8", errors="ignore")
+                    break
+        else:
+            body = msg.get_payload(decode=True).decode("utf-8", errors="ignore")
 
-    body = ' '.join(body.split()[:300])
-    return subject, sender, body
+        body = ' '.join(body.split()[:300])
+        return subject, sender, body
+
+    except Exception as e:
+        print(f"⚠️ Error leyendo email: {e}")
+        return "Sin asunto", "Desconocido", ""
 
 def build_prompt(subject, sender, body, labels):
     etiquetas = "\n".join(
@@ -72,14 +90,18 @@ Email a clasificar:
 Responde ÚNICAMENTE con el nombre exacto de una etiqueta de la lista, sin explicaciones."""
 
 def decide_label(subject, sender, body, labels):
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    prompt = build_prompt(subject, sender, body, labels)
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=20
-    )
-    return response.choices[0].message.content.strip()
+    try:
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        prompt = build_prompt(subject, sender, body, labels)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=20
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"⚠️ Error llamando a OpenAI: {e}")
+        return None
 
 def apply_label(mail, email_id, label_name):
     try:
@@ -89,6 +111,7 @@ def apply_label(mail, email_id, label_name):
         print(f"⚠️ No se pudo aplicar etiqueta {label_name}: {e}")
 
 def main():
+    print("🚀 Iniciando clasificación de emails")
     config = load_config()
     labels = config['labels']
     label_names = [l['nombre'] for l in labels]
@@ -96,24 +119,36 @@ def main():
     email_ids = get_recent_emails(mail)
 
     if not email_ids:
-        print("No hay emails")
+        print("📭 No hay emails")
         return
+
+    etiquetados = 0
+    saltados = 0
+    errores = 0
 
     for email_id in email_ids:
         subject, sender, body = get_email_details(mail, email_id)
 
         if has_custom_label(mail, email_id, label_names):
             print(f"⏭️ {subject[:50]} → ya etiquetado, saltando")
+            saltados += 1
             continue
 
         label = decide_label(subject, sender, body, labels)
 
+        if label is None:
+            errores += 1
+            continue
+
         if label in label_names:
             apply_label(mail, email_id, label)
             print(f"✅ {subject[:50]} → {label}")
+            etiquetados += 1
         else:
             print(f"⚠️ {subject[:50]} → etiqueta no reconocida: {label}")
+            errores += 1
 
+    print(f"\n📊 Resumen: {etiquetados} etiquetados | {saltados} saltados | {errores} errores")
     mail.logout()
 
 if __name__ == "__main__":
