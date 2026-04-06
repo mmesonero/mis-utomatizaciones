@@ -8,15 +8,13 @@ on:
 jobs:
   etiquetar:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Descargar repositorio
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v4
 
       - name: Instalar Python
-        uses: actions/setup-python@v5.4.0
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
