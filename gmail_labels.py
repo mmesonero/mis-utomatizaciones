@@ -31,10 +31,12 @@ def get_recent_emails(mail):
 
 def has_custom_label(mail, email_id, label_names):
     try:
-        _, data = mail.fetch(email_id, '(X-GM-LABELS)')
+        _, data = mail.fetch(email_id, '(FLAGS X-GM-LABELS)')
         if not data or not data[0]:
             return False
         labels_raw = str(data[0])
+        # Restaurar estado no leído
+        mail.store(email_id, '-FLAGS', '\\Seen')
         for label in label_names:
             if f'"{label}"' in labels_raw or f' {label} ' in labels_raw:
                 return True
