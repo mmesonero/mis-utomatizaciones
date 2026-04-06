@@ -2,7 +2,7 @@ name: Etiquetar Emails con GPT
 
 on:
   schedule:
-    - cron: '0 */4 * * *'  # Cada 4 horas
+    - cron: '0 * * * *'  # Cada hora
   workflow_dispatch:         # También puedes ejecutarlo manualmente
 
 jobs:
