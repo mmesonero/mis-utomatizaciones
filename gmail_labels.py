@@ -37,15 +37,12 @@ def get_email_details(mail, email_id):
     _, msg_data = mail.fetch(email_id, "(RFC822)")
     msg = email.message_from_bytes(msg_data[0][1])
 
-    # Asunto
     subject, encoding = decode_header(msg["Subject"])[0]
     if isinstance(subject, bytes):
         subject = subject.decode(encoding or "utf-8", errors="ignore")
 
-    # Remitente
     sender = msg.get("From", "Desconocido")
 
-    # Body
     body = ""
     if msg.is_multipart():
         for part in msg.walk():
@@ -103,11 +100,12 @@ def main():
         return
 
     for email_id in email_ids:
+        subject, sender, body = get_email_details(mail, email_id)
+
         if has_custom_label(mail, email_id, label_names):
-            print(f"⏭️ {subject[:50]} ya etiquetado, saltando")
+            print(f"⏭️ {subject[:50]} → ya etiquetado, saltando")
             continue
 
-        subject, sender, body = get_email_details(mail, email_id)
         label = decide_label(subject, sender, body, labels)
 
         if label in label_names:
