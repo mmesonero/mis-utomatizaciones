@@ -17,11 +17,21 @@ def get_gmail_connection():
     mail.login(gmail_user, gmail_password)
     return mail
 
-def get_unread_emails(mail):
+def get_recent_emails(mail):
     mail.select("inbox")
     _, messages = mail.search(None, 'ALL')
     email_ids = messages[0].split()
     return email_ids[-15:]
+
+def has_custom_label(mail, email_id, label_names):
+    _, data = mail.fetch(email_id, '(X-GM-LABELS)')
+    if not data or not data[0]:
+        return False
+    labels_raw = str(data[0])
+    for label in label_names:
+        if label in labels_raw:
+            return True
+    return False
 
 def get_email_details(mail, email_id):
     _, msg_data = mail.fetch(email_id, "(RFC822)")
@@ -75,8 +85,6 @@ def decide_label(subject, sender, body, labels):
     return response.choices[0].message.content.strip()
 
 def apply_label(mail, email_id, label_name):
-    # Convertir nombre de etiqueta a formato IMAP de Gmail
-    label_imap = label_name.replace(" ", "-")
     try:
         mail.store(email_id, "+X-GM-LABELS", f'"{label_name}"')
         print(f"✅ Etiqueta aplicada: {label_name}")
@@ -86,17 +94,22 @@ def apply_label(mail, email_id, label_name):
 def main():
     config = load_config()
     labels = config['labels']
+    label_names = [l['nombre'] for l in labels]
     mail = get_gmail_connection()
-    email_ids = get_unread_emails(mail)
+    email_ids = get_recent_emails(mail)
 
     if not email_ids:
-        print("No hay emails sin leer")
+        print("No hay emails")
         return
 
     for email_id in email_ids:
+        if has_custom_label(mail, email_id, label_names):
+            print(f"⏭️ Email ya etiquetado, saltando")
+            continue
+
         subject, sender, body = get_email_details(mail, email_id)
         label = decide_label(subject, sender, body, labels)
-        label_names = [l['nombre'] for l in labels]
+
         if label in label_names:
             apply_label(mail, email_id, label)
             print(f"✅ {subject[:50]} → {label}")
