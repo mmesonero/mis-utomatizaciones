@@ -1,52 +1,49 @@
 import os
 import json
 import base64
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
+import imaplib
+import email
+from email.header import decode_header
 from openai import OpenAI
-
-SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
 def load_config():
     with open('config.json', 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def get_gmail_service():
-    creds_data = json.loads(os.environ["GMAIL_CREDENTIALS"])
-    creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
-    return build('gmail', 'v1', credentials=creds)
+def get_gmail_connection():
+    gmail_user = os.environ["GMAIL_USER"]
+    gmail_password = os.environ["GMAIL_CREDENTIALS"]
+    mail = imaplib.IMAP4_SSL("imap.gmail.com")
+    mail.login(gmail_user, gmail_password)
+    return mail
 
-def get_unread_emails(service):
-    results = service.users().messages().list(
-        userId='me',
-        q='is:unread',
-        maxResults=20
-    ).execute()
-    return results.get('messages', [])
+def get_unread_emails(mail):
+    mail.select("inbox")
+    _, messages = mail.search(None, 'UNSEEN')
+    email_ids = messages[0].split()
+    return email_ids[-20:] if len(email_ids) > 20 else email_ids
 
-def get_email_details(service, msg_id):
-    msg = service.users().messages().get(
-        userId='me',
-        id=msg_id,
-        format='full'
-    ).execute()
-    headers = msg['payload']['headers']
-    subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'Sin asunto')
-    sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Desconocido')
+def get_email_details(mail, email_id):
+    _, msg_data = mail.fetch(email_id, "(RFC822)")
+    msg = email.message_from_bytes(msg_data[0][1])
 
-    body = ''
-    payload = msg['payload']
-    if 'parts' in payload:
-        for part in payload['parts']:
-            if part['mimeType'] == 'text/plain':
-                data = part['body'].get('data', '')
-                if data:
-                    body = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-                    break
-    elif 'body' in payload:
-        data = payload['body'].get('data', '')
-        if data:
-            body = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+    # Asunto
+    subject, encoding = decode_header(msg["Subject"])[0]
+    if isinstance(subject, bytes):
+        subject = subject.decode(encoding or "utf-8", errors="ignore")
+
+    # Remitente
+    sender = msg.get("From", "Desconocido")
+
+    # Body
+    body = ""
+    if msg.is_multipart():
+        for part in msg.walk():
+            if part.get_content_type() == "text/plain":
+                body = part.get_payload(decode=True).decode("utf-8", errors="ignore")
+                break
+    else:
+        body = msg.get_payload(decode=True).decode("utf-8", errors="ignore")
 
     body = ' '.join(body.split()[:300])
     return subject, sender, body
@@ -77,34 +74,36 @@ def decide_label(subject, sender, body, labels):
     )
     return response.choices[0].message.content.strip()
 
-def apply_label(service, msg_id, label_name):
-    all_labels = service.users().labels().list(userId='me').execute()
-    label_id = next(
-        (l['id'] for l in all_labels['labels'] if l['name'] == label_name),
-        None
-    )
-    if label_id:
-        service.users().messages().modify(
-            userId='me',
-            id=msg_id,
-            body={'addLabelIds': [label_id]}
-        ).execute()
+def apply_label(mail, email_id, label_name):
+    # Convertir nombre de etiqueta a formato IMAP de Gmail
+    label_imap = label_name.replace(" ", "-")
+    try:
+        mail.store(email_id, "+X-GM-LABELS", f'"{label_name}"')
+        print(f"✅ Etiqueta aplicada: {label_name}")
+    except Exception as e:
+        print(f"⚠️ No se pudo aplicar etiqueta {label_name}: {e}")
 
 def main():
     config = load_config()
     labels = config['labels']
-    service = get_gmail_service()
-    emails = get_unread_emails(service)
+    mail = get_gmail_connection()
+    email_ids = get_unread_emails(mail)
 
-    for email in emails:
-        subject, sender, body = get_email_details(service, email['id'])
+    if not email_ids:
+        print("No hay emails sin leer")
+        return
+
+    for email_id in email_ids:
+        subject, sender, body = get_email_details(mail, email_id)
         label = decide_label(subject, sender, body, labels)
         label_names = [l['nombre'] for l in labels]
         if label in label_names:
-            apply_label(service, email['id'], label)
+            apply_label(mail, email_id, label)
             print(f"✅ {subject[:50]} → {label}")
         else:
             print(f"⚠️ {subject[:50]} → etiqueta no reconocida: {label}")
+
+    mail.logout()
 
 if __name__ == "__main__":
     main()
