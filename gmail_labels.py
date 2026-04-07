@@ -21,6 +21,17 @@ def get_gmail_connection():
         print(f"❌ Error conectando a Gmail: {e}")
         raise
 
+def reconnect(gmail_user, gmail_password):
+    try:
+        mail = imaplib.IMAP4_SSL("imap.gmail.com")
+        mail.login(gmail_user, gmail_password)
+        mail.select("inbox")
+        print("🔄 Reconexión exitosa")
+        return mail
+    except Exception as e:
+        print(f"❌ Error reconectando: {e}")
+        raise
+
 def get_recent_emails(mail):
     mail.select("inbox")
     _, messages = mail.search(None, 'ALL')
@@ -34,9 +45,9 @@ def has_custom_label(mail, email_id, label_names):
         _, data = mail.fetch(email_id, '(X-GM-LABELS)')
         if not data or not data[0]:
             return False
-        labels_raw = str(data[0])
+        labels_raw = data[0].decode('utf-8', errors='ignore') if isinstance(data[0], bytes) else str(data[0])
         for label in label_names:
-            if f'"{label}"' in labels_raw or f' {label} ' in labels_raw:
+            if label in labels_raw:
                 return True
         return False
     except Exception:
@@ -71,7 +82,7 @@ def get_email_details(mail, email_id):
 
     except Exception as e:
         print(f"⚠️ Error leyendo email: {e}")
-        return "Sin asunto", "Desconocido", ""
+        return None, None, None
 
 def build_prompt(subject, sender, body, labels):
     etiquetas = "\n".join(
@@ -112,6 +123,8 @@ def decide_label(subject, sender, body, labels):
 
 def apply_label(mail, email_id, label_name):
     try:
+        # Encode label name as UTF-7 for IMAP compatibility
+        encoded = label_name.encode('utf-7').decode('ascii')
         mail.store(email_id, "+X-GM-LABELS", f'"{label_name}"')
         print(f"✅ Etiqueta aplicada: {label_name}")
     except Exception as e:
@@ -122,6 +135,10 @@ def main():
     config = load_config()
     labels = config['labels']
     label_names = [l['nombre'] for l in labels]
+
+    gmail_user = os.environ["GMAIL_USER"]
+    gmail_password = os.environ["GMAIL_CREDENTIALS"]
+
     mail = get_gmail_connection()
     email_ids = get_recent_emails(mail)
 
@@ -133,30 +150,52 @@ def main():
     saltados = 0
     errores = 0
 
-    for email_id in email_ids:
-        subject, sender, body = get_email_details(mail, email_id)
+    for i, email_id in enumerate(email_ids):
+        try:
+            if has_custom_label(mail, email_id, label_names):
+                # Obtener asunto solo para el log
+                _, msg_data = mail.fetch(email_id, "(BODY.PEEK[HEADER.FIELDS (SUBJECT)])")
+                msg = email.message_from_bytes(msg_data[0][1])
+                subj = msg.get("Subject", "Sin asunto")
+                print(f"⏭️ {subj[:50]} → ya etiquetado, saltando")
+                saltados += 1
+                continue
 
-        if has_custom_label(mail, email_id, label_names):
-            print(f"⏭️ {subject[:50]} → ya etiquetado, saltando")
-            saltados += 1
-            continue
+            subject, sender, body = get_email_details(mail, email_id)
 
-        label = decide_label(subject, sender, body, labels)
+            if subject is None:
+                # Reconectar si falla la conexión
+                mail = reconnect(gmail_user, gmail_password)
+                errores += 1
+                continue
 
-        if label is None:
-            errores += 1
-            continue
+            label = decide_label(subject, sender, body, labels)
 
-        if label in label_names:
-            apply_label(mail, email_id, label)
-            print(f"✅ {subject[:50]} → {label}")
-            etiquetados += 1
-        else:
-            print(f"⚠️ {subject[:50]} → etiqueta no reconocida: {label}")
-            errores += 1
+            if label is None:
+                errores += 1
+                continue
+
+            if label in label_names:
+                apply_label(mail, email_id, label)
+                print(f"✅ {subject[:50]} → {label}")
+                etiquetados += 1
+            else:
+                print(f"⚠️ {subject[:50]} → etiqueta no reconocida: {label}")
+                errores += 1
+
+        except Exception as e:
+            print(f"⚠️ Error general en email {i}: {e}")
+            try:
+                mail = reconnect(gmail_user, gmail_password)
+            except Exception:
+                print("❌ No se pudo reconectar, abortando")
+                break
 
     print(f"\n📊 Resumen: {etiquetados} etiquetados | {saltados} saltados | {errores} errores")
-    mail.logout()
+    try:
+        mail.logout()
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     main()
